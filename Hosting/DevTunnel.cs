@@ -15,7 +15,8 @@ public sealed partial class DevTunnel(
     IServer server,
     StartupMessage startupMessage,
     IWebHostEnvironment environment,
-    ILogger<DevTunnel> logger) : BackgroundService
+    ILogger<DevTunnel> logger,
+    PublicUrlProvider urlProvider) : BackgroundService
 {
     private const string Cli = "devtunnel";
 
@@ -55,7 +56,7 @@ public sealed partial class DevTunnel(
                 return;
             }
 
-            if (await HostAsync(tunnelId, port, stoppingToken))
+            if (await HostAsync(tunnelId, port, urlProvider, stoppingToken))
             {
                 return;
             }
@@ -137,7 +138,7 @@ public sealed partial class DevTunnel(
     }
 
     /// <summary>Hosts the tunnel until the catalog stops. Returns false if the tunnel couldn't be hosted.</summary>
-    private static async Task<bool> HostAsync(string tunnelId, int port, CancellationToken stoppingToken)
+    private static async Task<bool> HostAsync(string tunnelId, int port, PublicUrlProvider urlProvider, CancellationToken stoppingToken)
     {
         using var host = Process.Start(new ProcessStartInfo(Cli, ["host", tunnelId])
         {
@@ -160,6 +161,7 @@ public sealed partial class DevTunnel(
                 {
                     announced = true;
                     var mcpAddress = match.Value.TrimEnd('/') + "/mcp";
+                    urlProvider.SetTunnelUrl(match.Value.TrimEnd('/'));
                     Console.WriteLine();
                     Console.WriteLine($"  Public MCP address  {mcpAddress}");
                     Console.WriteLine();

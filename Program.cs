@@ -23,6 +23,7 @@ builder.Services.AddSingleton<FeedbackLog>();
 builder.Services.AddSingleton<AccessTokens>();
 builder.Services.AddSingleton<CatalogTools>();
 builder.Services.AddSingleton<McpServer>();
+builder.Services.AddSingleton<PublicUrlProvider>();
 
 // People sign in to the web pages once with their token and get a cookie.
 // MCP clients send the token on every request in the Authorization header.
@@ -52,8 +53,31 @@ var app = builder.Build();
 var startupMessage = app.Services.GetRequiredService<StartupMessage>();
 app.Lifetime.ApplicationStarted.Register(() => startupMessage.Write(app));
 
+var urlProvider = app.Services.GetRequiredService<PublicUrlProvider>();
+app.Lifetime.ApplicationStarted.Register(() => urlProvider.Initialize(app));
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+// OAuth/OIDC metadata endpoint for MCP discovery
+app.MapGet(".well-known/openid-configuration", (PublicUrlProvider urlProvider) =>
+{
+    var baseUrl = urlProvider.GetPublicUrl();
+    return Results.Json(new
+    {
+        issuer = baseUrl,
+        authorization_endpoint = $"{baseUrl}/signin",
+        token_endpoint = $"{baseUrl}/token",
+        userinfo_endpoint = $"{baseUrl}/userinfo",
+        introspection_endpoint = $"{baseUrl}/introspect",
+        response_types_supported = new[] { "code", "token" },
+        subject_types_supported = new[] { "public" },
+        id_token_signing_alg_values_supported = new[] { "RS256" },
+        scopes_supported = new[] { "openid", "profile", "email" },
+        token_endpoint_auth_methods_supported = new[] { "none", "client_secret_basic" },
+        claims_supported = new[] { "sub", "name", "email" },
+    });
+}).AllowAnonymous().WithName("OpenIdConfig");
 
 app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
